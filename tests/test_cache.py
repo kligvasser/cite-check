@@ -24,6 +24,29 @@ def test_clear(tmp_path):
     cache.close()
 
 
+class EmptyBackend:
+    name = "empty"
+
+    def __init__(self):
+        self.calls = 0
+
+    def search(self, query, limit=5):
+        self.calls += 1
+        return []
+
+
+def test_empty_results_are_not_cached(tmp_path):
+    from cite_check.backends import CachedBackend
+
+    inner = EmptyBackend()
+    cache = QueryCache(tmp_path / "cache.db")
+    backend = CachedBackend(inner, cache)
+    backend.search("q")
+    backend.search("q")
+    assert inner.calls == 2  # a transient empty result must not make NOT_FOUND sticky
+    cache.close()
+
+
 def test_cached_backend_hits_inner_once(tmp_path, fake_backend):
     cache = QueryCache(tmp_path / "cache.db")
     backend = CachedBackend(fake_backend, cache)

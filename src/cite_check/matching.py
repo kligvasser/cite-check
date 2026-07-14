@@ -47,7 +47,11 @@ def _author_parts(name: str) -> tuple[str, str]:
 
 
 def author_score(cited: list[str], found: list[str]) -> float | None:
-    """Fraction of cited authors present in the found list (last name + initial)."""
+    """Fraction of cited authors present in the found list (last name + initial).
+
+    Scholar truncates long author lists, so the denominator is the shorter list:
+    a 10-author citation matched against Scholar's first 3 must not be punished.
+    """
     if not cited or not found:
         return None
     found_parts = [_author_parts(name) for name in found]
@@ -60,7 +64,7 @@ def author_score(cited: list[str], found: list[str]) -> float | None:
             ):
                 matched += 1
                 break
-    return 100.0 * matched / len(cited)
+    return min(100.0, 100.0 * matched / min(len(cited), len(found)))
 
 
 def year_score(cited: int | None, found: int | None) -> float | None:

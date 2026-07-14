@@ -10,6 +10,10 @@ class BackendError(RuntimeError):
     """A backend query failed (network error, blocked, bad API key...)."""
 
 
+# transient HTTP statuses worth retrying with backoff (esp. Semantic Scholar's 429)
+RETRYABLE_STATUSES = frozenset({429, 500, 502, 503})
+
+
 @runtime_checkable
 class ScholarBackend(Protocol):
     name: str
@@ -30,5 +34,7 @@ class CachedBackend:
         if cached is not None:
             return cached[:limit]
         records = self._inner.search(query, limit)
-        self._cache.put(self.name, query, records)
+        # never cache empty results: a transient hiccup would make NOT_FOUND sticky
+        if records:
+            self._cache.put(self.name, query, records)
         return records

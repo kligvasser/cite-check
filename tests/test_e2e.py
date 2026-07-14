@@ -51,6 +51,22 @@ def test_wrong_authors_get_author_fix(fake_backend):
     assert adam.suggested_fix.corrected_fields["author"] == "Diederik P. Kingma and Jimmy Ba"
 
 
+def test_engine_survives_broken_backend():
+    from cite_check.models import VerificationStatus as VS
+
+    class ExplodingBackend:
+        name = "boom"
+
+        def search(self, query, limit=5):
+            raise RuntimeError("kaboom")  # not a BackendError: unexpected failure
+
+    refs = parse_bibtex(CORPUS)
+    results = VerificationEngine(backend=ExplodingBackend()).verify_all(refs)
+    assert len(results) == len(refs)
+    assert all(r.status == VS.ERROR for r in results)
+    assert "kaboom" in (results[0].note or "")
+
+
 def test_report_outputs(fake_backend):
     results = run_corpus(fake_backend)
 

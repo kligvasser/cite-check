@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 
 from cite_check.models import Reference
-from cite_check.normalize import clean_text, extract_year
+from cite_check.normalize import clean_plain, extract_year
 
 _TEI = {"tei": "http://www.tei-c.org/ns/1.0"}
 
@@ -46,11 +46,11 @@ def _parse_bibl_struct(bibl: ET.Element, index: int) -> Reference | None:
 
     return Reference(
         key=f"ref-{index}",
-        raw=clean_text("".join(bibl.itertext())),
-        title=clean_text(title),
+        raw=clean_plain("".join(bibl.itertext())),
+        title=clean_plain(title),
         authors=authors,
         year=year,
-        venue=clean_text(venue) if venue else None,
+        venue=clean_plain(venue) if venue else None,
         doi=_text(doi_el),
         source="pdf",
     )

@@ -44,7 +44,8 @@ class VerificationEngine:
 
         # b) quoted-title query; c) refined query if the best title match is weak
         try:
-            candidates += self._backend.search(f'"{ref.title}"', self._limit)
+            quoted_title = ref.title.replace('"', "")  # embedded quotes break the phrase query
+            candidates += self._backend.search(f'"{quoted_title}"', self._limit)
             best_title = max((title_score(ref.title, c.title) for c in candidates), default=0.0)
             if best_title < TITLE_CANDIDATE:
                 refined = self._refine_query(ref)
@@ -86,8 +87,19 @@ class VerificationEngine:
     ) -> list[VerificationResult]:
         results = []
         for ref in refs:
-            result = self.verify_one(ref)
+            result = self.verify_one_safe(ref)
             results.append(result)
             if on_result is not None:
                 on_result(result)
         return results
+
+    def verify_one_safe(self, ref: Reference) -> VerificationResult:
+        """verify_one, but one bad reference must not kill the whole run."""
+        try:
+            return self.verify_one(ref)
+        except Exception as exc:
+            return VerificationResult(
+                reference=ref,
+                status=VerificationStatus.ERROR,
+                note=f"unexpected error: {exc}",
+            )

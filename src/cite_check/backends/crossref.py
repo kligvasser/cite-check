@@ -4,9 +4,9 @@ from typing import Any
 
 import httpx
 
-from cite_check.backends.base import BackendError
+from cite_check.backends.base import RETRYABLE_STATUSES, BackendError
 from cite_check.models import ScholarRecord
-from cite_check.ratelimit import RateLimiter
+from cite_check.ratelimit import RateLimiter, with_retries
 
 WORKS_URL = "https://api.crossref.org/works"
 
@@ -47,7 +47,9 @@ class CrossrefBackend:
         if self._limiter is not None:
             self._limiter.wait()
         try:
-            response = self._client.get(f"{WORKS_URL}/{doi}")
+            response = with_retries(
+                lambda: self._checked_get(f"{WORKS_URL}/{doi}"), tries=3, base_s=2.0
+            )
             if response.status_code == 404:
                 return None
             response.raise_for_status()
@@ -56,12 +58,22 @@ class CrossrefBackend:
             raise BackendError(f"Crossref DOI lookup failed: {exc}") from exc
         return _record_from_work(work)
 
+    def _checked_get(self, url: str, **kwargs: object) -> httpx.Response:
+        response = self._client.get(url, **kwargs)  # type: ignore[arg-type]
+        if response.status_code in RETRYABLE_STATUSES:
+            response.raise_for_status()
+        return response
+
     def search(self, query: str, limit: int = 5) -> list[ScholarRecord]:
         if self._limiter is not None:
             self._limiter.wait()
         try:
-            response = self._client.get(
-                WORKS_URL, params={"query.bibliographic": query, "rows": limit}
+            response = with_retries(
+                lambda: self._checked_get(
+                    WORKS_URL, params={"query.bibliographic": query, "rows": limit}
+                ),
+                tries=3,
+                base_s=2.0,
             )
             response.raise_for_status()
             items = response.json().get("message", {}).get("items", [])

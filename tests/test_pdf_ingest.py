@@ -81,6 +81,31 @@ def test_parse_lncs_springer_style():
     )
 
 
+def test_arxiv_id_is_not_mistaken_for_year():
+    from cite_check.ingest.pdf import parse_reference_string
+
+    ref = parse_reference_string(
+        "[7] A. Author, B. Author. A method for something quite specific. "
+        "arXiv preprint arXiv:2010.12345, 2022.",
+        7,
+    )
+    assert ref is not None
+    assert ref.year == 2022  # not 2010 from the arXiv id
+    assert ref.venue == "arXiv preprint"  # id stripped from the venue
+
+
+def test_generic_ref_with_colon_title_is_not_lncs():
+    from cite_check.ingest.pdf import parse_reference_string
+
+    ref = parse_reference_string(
+        "[3] J. Doe, K. Smith. BERT: pretraining of transformers for language. NAACL, 2019.",
+        3,
+    )
+    assert ref is not None
+    assert ref.title == "BERT: pretraining of transformers for language"
+    assert ref.year == 2019
+
+
 def test_parse_real_pdf_end_to_end(tmp_path):
     fitz = pytest.importorskip("fitz")
     pdf_path = tmp_path / "paper.pdf"

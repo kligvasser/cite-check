@@ -97,6 +97,16 @@ def test_author_score_missing_side_is_none():
     assert author_score([], ["A Vaswani"]) is None
 
 
+def test_author_score_tolerates_truncated_scholar_list():
+    # Scholar returns only the first authors of a long list; that is not a mismatch
+    cited = ["Ashish Vaswani", "Noam Shazeer", "Niki Parmar", "Jakob Uszkoreit", "Llion Jones"]
+    assert author_score(cited, ["A Vaswani", "N Shazeer"]) == 100.0
+
+
+def test_author_score_still_catches_wrong_authors():
+    assert author_score(["John Smith", "Mary Jones"], ["A Vaswani", "N Shazeer"]) == 0.0
+
+
 def test_year_score_soft_matching():
     assert year_score(2017, 2017) == 100.0
     assert year_score(2017, 2018) == 70.0

@@ -6,6 +6,7 @@ Exit codes: 0 = all verified, 1 = problems found, 2 = usage/input error.
 from pathlib import Path
 from typing import Annotated
 
+import httpx
 import typer
 from rich.console import Console
 from rich.progress import track
@@ -46,8 +47,17 @@ def _ingest(path: Path, parser: str, settings: Settings) -> list[Reference]:
         return parse_bibtex(path)
     if suffix == ".pdf":
         if parser == "grobid":
-            return GrobidClient(settings.grobid_url).parse_references(path)
-        return parse_pdf(path)
+            try:
+                return GrobidClient(settings.grobid_url).parse_references(path)
+            except httpx.HTTPError as exc:
+                raise typer.BadParameter(
+                    f"GROBID server not reachable at {settings.grobid_url} ({exc}). "
+                    "Start one with: docker run --rm -p 8070:8070 lfoppiano/grobid:0.8.0"
+                ) from exc
+        try:
+            return parse_pdf(path)
+        except ValueError as exc:  # no references section found
+            raise typer.BadParameter(str(exc)) from exc
     raise typer.BadParameter(f"Unsupported input type: {suffix} (expected .bib or .pdf)")
 
 
@@ -90,8 +100,12 @@ def verify(
         str, typer.Option("--parser", help="PDF parser: heuristic or grobid.")
     ] = "heuristic",
     scholar_only: Annotated[
-        bool, typer.Option("--scholar-only", help="Disable Crossref/Semantic Scholar helpers.")
-    ] = False,
+        bool | None,
+        typer.Option(
+            "--scholar-only/--no-scholar-only",
+            help="Disable (or re-enable) Crossref/Semantic Scholar helpers.",
+        ),
+    ] = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Only parse and list references; skip verification.")
     ] = False,
@@ -107,12 +121,18 @@ def verify(
     ] = False,
 ) -> None:
     """Extract references from INPUT_FILE and verify each against Google Scholar."""
-    settings = load_settings(backend=backend, scholar_only=scholar_only or None)
+    settings = load_settings(backend=backend, scholar_only=scholar_only)
 
-    refs = dedupe_references(_ingest(input_file, parser, settings))
+    parsed = _ingest(input_file, parser, settings)
+    refs = dedupe_references(parsed)
     if not refs:
         console.print("[red]No references found in input.[/red]")
         raise typer.Exit(code=2)
+    if len(refs) < len(parsed):
+        console.print(
+            f"[yellow]Skipped {len(parsed) - len(refs)} duplicate reference(s) "
+            "(same title and year).[/yellow]"
+        )
 
     _print_references(refs)
     if dry_run:
@@ -125,10 +145,13 @@ def verify(
         corroborator=None if settings.scholar_only else SemanticScholarBackend(RateLimiter(1.0)),
         results_per_query=settings.results_per_query,
     )
-    results = [
-        engine.verify_one(ref) for ref in track(refs, description="Verifying", console=console)
-    ]
-    cache.close()
+    try:
+        results = list(
+            engine.verify_one_safe(ref)
+            for ref in track(refs, description="Verifying", console=console)
+        )
+    finally:
+        cache.close()
 
     print_report(results, console)
 
@@ -139,9 +162,15 @@ def verify(
         report_out.write_text(to_markdown(results))
         console.print(f"Markdown report written to [cyan]{report_out}[/cyan]")
     if emit_fixed_bib:
-        fixed_path = input_file.with_suffix(".fixed.bib")
-        fixed_path.write_text(build_fixed_bib(results))
-        console.print(f"Corrected bibliography written to [cyan]{fixed_path}[/cyan]")
+        if input_file.suffix.lower() != ".bib":
+            console.print(
+                "[yellow]--emit-fixed-bib only applies to BibTeX input; "
+                "PDF references have no entries to rewrite.[/yellow]"
+            )
+        else:
+            fixed_path = input_file.with_suffix(".fixed.bib")
+            fixed_path.write_text(build_fixed_bib(results))
+            console.print(f"Corrected bibliography written to [cyan]{fixed_path}[/cyan]")
 
     if any(r.status != VerificationStatus.VERIFIED for r in results):
         raise typer.Exit(code=1)

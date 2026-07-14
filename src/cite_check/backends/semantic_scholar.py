@@ -2,9 +2,9 @@
 
 import httpx
 
-from cite_check.backends.base import BackendError
+from cite_check.backends.base import RETRYABLE_STATUSES, BackendError
 from cite_check.models import ScholarRecord
-from cite_check.ratelimit import RateLimiter
+from cite_check.ratelimit import RateLimiter, with_retries
 
 SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 _FIELDS = "title,authors,year,venue,url,citationCount"
@@ -22,10 +22,17 @@ class SemanticScholarBackend:
     def search(self, query: str, limit: int = 5) -> list[ScholarRecord]:
         if self._limiter is not None:
             self._limiter.wait()
-        try:
+
+        def _get() -> httpx.Response:
             response = self._client.get(
                 SEARCH_URL, params={"query": query, "limit": limit, "fields": _FIELDS}
             )
+            if response.status_code in RETRYABLE_STATUSES:  # free tier 429s often
+                response.raise_for_status()
+            return response
+
+        try:
+            response = with_retries(_get, tries=3, base_s=2.0)
             response.raise_for_status()
             data = response.json()
         except httpx.HTTPError as exc:

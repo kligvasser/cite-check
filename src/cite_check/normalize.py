@@ -14,15 +14,30 @@ _YEAR_RE = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
 
 
 def clean_text(value: str) -> str:
-    """Convert LaTeX escapes to unicode, normalize, and collapse whitespace."""
+    """Convert LaTeX escapes to unicode, normalize, and collapse whitespace.
+
+    Only for LaTeX-encoded input (BibTeX fields): a literal ``%`` in plain text
+    would be treated as a LaTeX comment and truncate the line — use
+    :func:`clean_plain` for PDF/API text.
+    """
     text = _latex.latex_to_text(value)
     text = unicodedata.normalize("NFKC", text)
     return _WHITESPACE_RE.sub(" ", text).strip()
 
 
+def clean_plain(value: str) -> str:
+    """Unicode-normalize and collapse whitespace, with no LaTeX interpretation."""
+    text = unicodedata.normalize("NFKC", value)
+    return _WHITESPACE_RE.sub(" ", text).strip()
+
+
 def comparison_key(value: str) -> str:
-    """Lowercased, punctuation-free form used for fuzzy comparison."""
-    text = clean_text(value).lower()
+    """Lowercased, punctuation-free form used for fuzzy comparison.
+
+    Inputs here are already unescaped (at ingestion) or come from APIs as plain
+    unicode, so no LaTeX pass — it would eat everything after a literal ``%``.
+    """
+    text = clean_plain(value).lower()
     text = re.sub(r"[^\w\s]", " ", text)
     return _WHITESPACE_RE.sub(" ", text).strip()
 

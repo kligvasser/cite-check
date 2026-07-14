@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from cite_check.models import Reference
-from cite_check.normalize import clean_text, extract_year
+from cite_check.normalize import clean_plain
 
 _HEADING_RE = re.compile(
     r"^\s*(?:[0-9]{1,2}\.?\s+|[IVXLC]+\.?\s+)?"
@@ -28,12 +28,19 @@ _APPENDIX_HEADING_RE = re.compile(r"(?m)^[A-Z]\s+[A-Z][^\n]{0,80}$")
 _APA_START_RE = re.compile(r"(?m)^(?=[A-Z][^\n]{0,150}?\((?:1[89]\d{2}|20\d{2})[a-z]?\))")
 
 _DOI_RE = re.compile(r"\b(10\.\d{4,9}/[^\s,;]+)", re.IGNORECASE)
+_ARXIV_ID_RE = re.compile(r"arXiv:\s*\d{4}\.\d{4,5}(?:v\d+)?", re.IGNORECASE)
+_YEAR_RE = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
 _QUOTED_TITLE_RE = re.compile(r"[\"“]([^\"”]{10,})[\"”]")
 _APA_YEAR_RE = re.compile(r"\((1[89]\d{2}|20\d{2})[a-z]?\)\.?\s*")
 # LNCS/Springer: "Abdar, M., Pourpanah, F., et al.: Title. Venue 76, 243-297 (2021)"
 _LNCS_RE = re.compile(r"^(?P<authors>[^:]{5,300}?,\s*[A-Z]\.[^:]*?):\s+(?P<rest>.+)$")
 # split on sentence-ish boundaries without breaking "J. Smith" initials
 _SEGMENT_SPLIT_RE = re.compile(r"(?<=[a-z\)\"”])\.\s+")
+# segments that describe the venue, not the title
+_VENUEISH_RE = re.compile(
+    r"^(?:in|proc(?:eedings)?|arxiv)\b|preprint|conference|journal|transactions|advances in",
+    re.IGNORECASE,
+)
 
 
 def extract_text(path: str | Path) -> str:
@@ -98,8 +105,21 @@ def split_references(section: str) -> list[str]:
     else:  # APA-ish: new entry starts with "Author, A. ... (year)"
         marks = [m.start() for m in _APA_START_RE.finditer(section)]
         chunks = _slice_at(section, marks) if len(marks) >= 2 else [section]
-    cleaned = [clean_text(c[:_MAX_CHUNK_CHARS].replace("\n", " ")) for c in chunks]
+    cleaned = [clean_plain(c[:_MAX_CHUNK_CHARS].replace("\n", " ")) for c in chunks]
     return [c for c in cleaned if len(c) > 20]
+
+
+def _reference_year(raw: str) -> int | None:
+    """Publication year of a reference string.
+
+    Prefer the last parenthesized "(year)" (APA/LNCS convention); otherwise the
+    last standalone year, after removing arXiv ids ("arXiv:2010.12345" is not 2010).
+    """
+    paren_years = _APA_YEAR_RE.findall(raw)
+    if paren_years:
+        return int(paren_years[-1])
+    years = _YEAR_RE.findall(_ARXIV_ID_RE.sub("", raw))
+    return int(years[-1]) if years else None
 
 
 def _parse_authors(author_part: str) -> list[str]:
@@ -135,6 +155,11 @@ def parse_reference_string(raw: str, index: int) -> Reference | None:
     apa_mid = apa is not None and apa.end() < len(stripped) - 1
     quoted = _QUOTED_TITLE_RE.search(stripped)
     lncs = _LNCS_RE.match(stripped)
+    # generic-style refs whose *title* contains a colon ("J. Doe, K. Smith. BERT:
+    # pretraining...") would misfire as LNCS; a real LNCS author list never
+    # contains a sentence boundary before the colon
+    if lncs and _SEGMENT_SPLIT_RE.search(lncs.group("authors")):
+        lncs = None
     if quoted:  # "Title in quotes" style
         title = quoted.group(1).strip(" .,")
         authors = _parse_authors(stripped[: quoted.start()])
@@ -153,8 +178,11 @@ def parse_reference_string(raw: str, index: int) -> Reference | None:
     else:  # A. Author, B. Author. Title of the paper. Venue, year.
         segments = _SEGMENT_SPLIT_RE.split(stripped)
         if len(segments) >= 2:
-            # the title is usually the longest early segment
-            title_idx = max(range(min(4, len(segments))), key=lambda i: len(segments[i]))
+            # the title is usually the longest early segment that isn't venue-shaped
+            candidates = [
+                i for i in range(min(4, len(segments))) if not _VENUEISH_RE.search(segments[i])
+            ] or list(range(min(4, len(segments))))
+            title_idx = max(candidates, key=lambda i: len(segments[i]))
             title = segments[title_idx].strip(" .,")
             authors = _parse_authors(". ".join(segments[:title_idx]))
             venue = segments[title_idx + 1].strip(" .,") if title_idx + 1 < len(segments) else None
@@ -163,6 +191,7 @@ def parse_reference_string(raw: str, index: int) -> Reference | None:
         return None
     if venue:
         venue = re.sub(r"^(?:in|In):?\s+", "", venue)
+        venue = _ARXIV_ID_RE.sub("", venue)  # "arXiv preprint arXiv:2107.03342" -> name only
         venue = re.sub(r"[,\s]*(?:1[89]\d{2}|20\d{2}).*$", "", venue).strip(" (,.")
         # drop trailing volume/page numbers: "Information fusion 76, 243-297" -> name only
         venue = re.sub(r"(?:[\s,]*\d+(?:\s*[–—-]\s*\d+)?)+\s*$", "", venue)
@@ -173,7 +202,7 @@ def parse_reference_string(raw: str, index: int) -> Reference | None:
         raw=raw,
         title=title,
         authors=authors,
-        year=extract_year(raw),
+        year=_reference_year(raw),
         venue=venue,
         doi=doi_match.group(1).rstrip(".") if doi_match else None,
         source="pdf",

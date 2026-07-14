@@ -19,6 +19,19 @@ def test_comparison_key_strips_punctuation_and_case():
     assert comparison_key("Attention is All You Need!") == "attention is all you need"
 
 
+def test_comparison_key_survives_percent_sign():
+    # a literal % must not be treated as a LaTeX comment that eats the rest
+    assert comparison_key("Improving accuracy by 15% on ImageNet") == (
+        "improving accuracy by 15 on imagenet"
+    )
+
+
+def test_clean_plain_keeps_percent_text():
+    from cite_check.normalize import clean_plain
+
+    assert clean_plain("gains of 15% were  reported") == "gains of 15% were reported"
+
+
 def test_normalize_author_last_first():
     assert normalize_author("He, Kaiming") == "Kaiming He"
 
