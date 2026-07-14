@@ -8,8 +8,6 @@ Each reference is classified as:
 - **MISMATCH** — a close record exists but fields disagree; a corrected entry is suggested
 - **NOT_FOUND** — no plausible record exists (possibly fabricated)
 
-See [PLAN.md](PLAN.md) for the full project plan.
-
 ## Setup
 
 ```bash

@@ -1,0 +1,9 @@
+10
+
+References
+[1] Abdar, M., Pourpanah, F., Hussain, S., Acharya, U.R., et al.: A review of uncertainty quantification in deep learning: Techniques, applications and challenges. Information fusion 76, 243–297 (2021)
+[2] Cohen, R., Kligvasser, I., Rivlin, E., Freedman, D.: Looks too good to be true: An information-theoretic analysis of hallucinations in generative restoration models. Advances in Neural Information Processing Systems 37 (2024)
+[3] Blau, Y., Michaeli, T.: The perception-distortion tradeoff. In: Proceedings of the IEEE conference on computer vision and pattern recognition. pp. 6228–6237 (2018)
+A Proofs of Section 3
+Following the definitions above, see the derivation in [1] which continues with
+appendix math and a stray citation marker [2] that must not become a reference.

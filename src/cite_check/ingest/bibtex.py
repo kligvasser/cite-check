@@ -1,9 +1,15 @@
-"""BibTeX ingestion: .bib file -> list[Reference] (plan §4.1)."""
+"""BibTeX ingestion: .bib file -> list[Reference] (plan §4.1).
+
+Uses bibtexparser v1: the `scholarly` backend depends on it, and v1/v2 cannot
+coexist (same module name), so the whole project pins <2.
+"""
 
 from pathlib import Path
 
 import bibtexparser
-from bibtexparser.model import Entry
+from bibtexparser.bibdatabase import BibDatabase
+from bibtexparser.bparser import BibTexParser
+from bibtexparser.bwriter import BibTexWriter
 
 from cite_check.models import Reference
 from cite_check.normalize import clean_text, extract_year, split_bibtex_authors
@@ -12,37 +18,40 @@ from cite_check.normalize import clean_text, extract_year, split_bibtex_authors
 _VENUE_FIELDS = ("journal", "booktitle", "publisher", "school", "institution", "howpublished")
 
 
-def _field(entry: Entry, name: str) -> str | None:
-    field = entry.fields_dict.get(name)
-    if field is None:
+def _entry_raw(entry: dict[str, str]) -> str:
+    """Serialize the entry back to a BibTeX block (v1 keeps no source text)."""
+    database = BibDatabase()
+    database.entries = [entry]
+    return str(BibTexWriter().write(database)).strip()
+
+
+def _entry_to_reference(entry: dict[str, str]) -> Reference | None:
+    title = entry.get("title", "").strip()
+    if not title:
         return None
-    value = str(field.value).strip()
-    return value or None
 
-
-def _entry_to_reference(entry: Entry) -> Reference | None:
-    title = _field(entry, "title")
-    if title is None:
-        return None
-
-    venue = next((v for f in _VENUE_FIELDS if (v := _field(entry, f)) is not None), None)
-    author_field = _field(entry, "author")
-    year_field = _field(entry, "year")
+    venue = next((entry[f].strip() for f in _VENUE_FIELDS if entry.get(f, "").strip()), None)
+    author_field = entry.get("author", "").strip()
+    year_field = entry.get("year", "").strip()
+    doi = entry.get("doi", "").strip()
 
     return Reference(
-        key=entry.key,
-        raw=entry.raw or "",
+        key=entry.get("ID"),
+        raw=_entry_raw(entry),
         title=clean_text(title),
         authors=split_bibtex_authors(author_field) if author_field else [],
         year=extract_year(year_field) if year_field else None,
         venue=clean_text(venue) if venue else None,
-        doi=_field(entry, "doi"),
+        doi=doi or None,
         source="bibtex",
     )
 
 
 def parse_bibtex(path: str | Path) -> list[Reference]:
     """Parse a .bib file into references, skipping entries without a title."""
-    library = bibtexparser.parse_file(str(path))  # type: ignore[attr-defined]
+    parser = BibTexParser(common_strings=True)
+    parser.ignore_nonstandard_types = False
+    with open(path, encoding="utf-8") as fh:
+        library = bibtexparser.load(fh, parser)
     refs = [ref for entry in library.entries if (ref := _entry_to_reference(entry)) is not None]
     return refs

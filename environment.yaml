@@ -7,7 +7,7 @@ dependencies:
   - pip
   - pip:
       # --- Ingestion (plan §4.1) ---
-      - bibtexparser          # .bib → structured entries
+      - "bibtexparser>=1.4,<2"  # .bib → structured entries (v1: scholarly requires it)
       - pylatexenc            # LaTeX escapes in titles/authors ({\"o} → ö)
       - pymupdf               # PDF text extraction (fitz)
 

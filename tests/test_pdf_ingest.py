@@ -12,6 +12,7 @@ from cite_check.ingest.pdf import (
 FIXTURES = Path(__file__).parent / "fixtures"
 IEEE_TEXT = (FIXTURES / "ieee_refs.txt").read_text()
 APA_TEXT = (FIXTURES / "apa_refs.txt").read_text()
+LNCS_TEXT = (FIXTURES / "lncs_refs.txt").read_text()
 
 
 def test_find_references_section_cuts_body_and_appendix():
@@ -55,6 +56,29 @@ def test_parse_apa_author_year():
     assert any("Goodfellow" in a for a in gan.authors)
     assert adam.title == "Adam: A method for stochastic optimization"
     assert adam.year == 2015
+
+
+def test_parse_lncs_springer_style():
+    refs = parse_pdf_text(LNCS_TEXT)
+    assert len(refs) == 3  # appendix text after the numbering break is dropped
+    review, hallucinations, tradeoff = refs
+    assert review.title == (
+        "A review of uncertainty quantification in deep learning: "
+        "Techniques, applications and challenges"
+    )
+    assert review.venue == "Information fusion"
+    assert review.year == 2021
+    assert any("Abdar" in a for a in review.authors)
+    assert hallucinations.title == (
+        "Looks too good to be true: An information-theoretic analysis "
+        "of hallucinations in generative restoration models"
+    )
+    assert hallucinations.year == 2024
+    assert tradeoff.title == "The perception-distortion tradeoff"
+    assert (
+        tradeoff.venue
+        == "Proceedings of the IEEE conference on computer vision and pattern recognition"
+    )
 
 
 def test_parse_real_pdf_end_to_end(tmp_path):
