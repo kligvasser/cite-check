@@ -1,0 +1,11 @@
+4 Conclusion
+
+We showed strong results on all benchmarks and leave further study to future work.
+
+REFERENCES
+
+[1] A. Vaswani, N. Shazeer, N. Parmar, "Attention is all you need," Advances in Neural Information Processing Systems, 2017.
+[2] K. He, X. Zhang, S. Ren, and J. Sun, "Deep residual learning for image recognition," in Proc. IEEE CVPR, 2016, pp. 770-778.
+[3] J. Devlin, M. Chang, K. Lee, and K. Toutanova, "BERT: Pre-training of deep bidirectional transformers for language understanding," in NAACL, 2019. doi: 10.18653/v1/N19-1423
+
+Appendix A: extra material that should not be parsed as references.

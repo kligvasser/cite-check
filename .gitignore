@@ -1,0 +1,64 @@
+# --- Secrets & local config ---
+.env
+.env.*
+!.env.example
+config/*.local.toml
+
+# --- App data (query cache, reports) ---
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+.cache/
+reports/
+*.log
+logs/
+
+# --- Input papers / bibliographies kept locally (fixtures live in tests/) ---
+papers/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+develop-eggs/
+wheels/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Packaging / tooling
+.python-version
+
+# --- Testing / linting / type checking ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.hypothesis/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Local AI-tooling state ---
+.claude/
+.agents/

@@ -1,0 +1,34 @@
+name: cite-check
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      # --- Ingestion (plan §4.1) ---
+      - bibtexparser          # .bib → structured entries
+      - pylatexenc            # LaTeX escapes in titles/authors ({\"o} → ö)
+      - pymupdf               # PDF text extraction (fitz)
+
+      # --- Verification backends (plan §2) ---
+      - scholarly             # free Google Scholar scraper (low volume)
+      - httpx                 # SerpAPI / Crossref / Semantic Scholar clients
+
+      # --- Matching / data models ---
+      - rapidfuzz             # fuzzy title/author/venue scoring
+      - "pydantic>=2"
+      - pydantic-settings     # layered config + env secrets (CITECHECK_*)
+
+      # --- CLI / reporting (plan §4.5–4.6) ---
+      - typer
+      - rich                  # terminal tables / summary
+      - jinja2                # markdown report templates
+
+      # --- Dev / test / quality ---
+      - pytest
+      - pytest-cov
+      - respx                 # mock httpx in tests
+      - ruff
+      - mypy
+      - pre-commit

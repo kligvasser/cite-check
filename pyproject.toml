@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cite-check"
+version = "0.1.0"
+description = "Verify the citations of a paper (PDF or BibTeX) against Google Scholar and suggest fixes"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Idan Kligvasser" }]
+dependencies = [
+    "bibtexparser>=2.0.0b7",
+    "pylatexenc",
+    "pymupdf",
+    "scholarly",
+    "httpx",
+    "rapidfuzz",
+    "pydantic>=2",
+    "pydantic-settings",
+    "typer",
+    "rich",
+    "jinja2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "respx",
+    "ruff",
+    "mypy",
+    "pre-commit",
+]
+
+[project.scripts]
+cite-check = "cite_check.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cite_check"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["live: tests that hit real network backends (excluded by default)"]
+addopts = "-m 'not live'"
