@@ -11,6 +11,9 @@ _latex = LatexNodes2Text()
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _YEAR_RE = re.compile(r"\b(1[89]\d{2}|20\d{2})\b")
+# new-style arXiv ids (2007+): "arXiv:2207.12598", "arxiv.org/abs/2207.12598v2"
+_ARXIV_RE = re.compile(r"(?:arxiv[:\s]*|arxiv\.org/(?:abs|pdf)/)(\d{4}\.\d{4,5})(?:v\d+)?", re.I)
+_URL_RE = re.compile(r"https?://[^\s{}\\]+")
 
 
 def clean_text(value: str) -> str:
@@ -61,6 +64,22 @@ def extract_year(value: str) -> int | None:
     """Pull a plausible publication year out of a free-form string."""
     match = _YEAR_RE.search(value)
     return int(match.group()) if match else None
+
+
+def extract_arxiv_id(*texts: str | None) -> str | None:
+    """Find a new-style arXiv identifier in any of the given strings."""
+    for text in texts:
+        if text and (match := _ARXIV_RE.search(text)):
+            return match.group(1)
+    return None
+
+
+def extract_url(*texts: str | None) -> str | None:
+    """Find the first http(s) URL in any of the given strings (``\\url{...}`` included)."""
+    for text in texts:
+        if text and (match := _URL_RE.search(text)):
+            return match.group().rstrip(".,;)")
+    return None
 
 
 def dedupe_references(refs: list[Reference]) -> list[Reference]:

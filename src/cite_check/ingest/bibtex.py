@@ -12,7 +12,13 @@ from bibtexparser.bparser import BibTexParser
 from bibtexparser.bwriter import BibTexWriter
 
 from cite_check.models import Reference
-from cite_check.normalize import clean_text, extract_year, split_bibtex_authors
+from cite_check.normalize import (
+    clean_text,
+    extract_arxiv_id,
+    extract_url,
+    extract_year,
+    split_bibtex_authors,
+)
 
 # BibTeX fields that describe the publication venue, in preference order.
 _VENUE_FIELDS = ("journal", "booktitle", "publisher", "school", "institution", "howpublished")
@@ -34,6 +40,13 @@ def _entry_to_reference(entry: dict[str, str]) -> Reference | None:
     author_field = entry.get("author", "").strip()
     year_field = entry.get("year", "").strip()
     doi = entry.get("doi", "").strip()
+    eprint = entry.get("eprint", "").strip()
+    if eprint and entry.get("archiveprefix", "").strip().lower() == "arxiv":
+        eprint = f"arXiv:{eprint}"
+    arxiv_id = extract_arxiv_id(
+        eprint, entry.get("journal"), entry.get("url"), entry.get("note"), entry.get("howpublished")
+    )
+    url = extract_url(entry.get("url"), entry.get("howpublished"), entry.get("note"))
 
     return Reference(
         key=entry.get("ID"),
@@ -43,6 +56,9 @@ def _entry_to_reference(entry: dict[str, str]) -> Reference | None:
         year=extract_year(year_field) if year_field else None,
         venue=clean_text(venue) if venue else None,
         doi=doi or None,
+        arxiv_id=arxiv_id,
+        url=url,
+        entry_type=entry.get("ENTRYTYPE", "").lower() or None,
         source="bibtex",
     )
 

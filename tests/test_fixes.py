@@ -3,7 +3,15 @@ from cite_check.models import Reference, ScholarRecord
 
 REF = Reference(
     key="devlin2019bert",
-    raw="@inproceedings{devlin2019bert,\n  title = {BERT...},\n}",
+    raw=(
+        "@inproceedings{devlin2019bert,\n"
+        " author = {Jacob Devlin and Ming-Wei Chang},\n"
+        " title = {BERT: Pre-training of Deep Bidirectional Transformers for Language "
+        "Understanding},\n"
+        " booktitle = {NAACL},\n"
+        " pages = {4171--4186},\n"
+        " year = {2017}\n}"
+    ),
     title="BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding",
     authors=["Jacob Devlin", "Ming-Wei Chang"],
     year=2017,
@@ -35,6 +43,20 @@ def test_corrected_bibtex_preserves_key_and_type():
     # undisputed fields keep the cited values
     assert "Jacob Devlin and Ming-Wei Chang" in bibtex
     assert "booktitle = {NAACL}" in bibtex
+
+
+def test_corrected_bibtex_keeps_fields_it_does_not_model():
+    bibtex = build_corrected_bibtex(REF, RECORD, YEAR_DIFF)
+    assert "pages = {4171--4186}" in bibtex  # not dropped by the rewrite
+    assert "2017" not in bibtex
+
+
+def test_wrong_doi_is_dropped_from_fix():
+    ref = REF.model_copy(
+        update={"raw": REF.raw.replace("year = {2017}", "year = {2017},\n doi = {10.1/x}")}
+    )
+    bibtex = build_corrected_bibtex(ref, RECORD, {"doi": ("10.1/x", "resolves to ...")})
+    assert "doi" not in bibtex
 
 
 def test_author_fix_uses_scholar_authors():

@@ -13,6 +13,7 @@ from rich.progress import track
 from rich.table import Table
 
 from cite_check.backends import (
+    ArxivBackend,
     CachedBackend,
     CrossrefBackend,
     ScholarBackend,
@@ -20,12 +21,13 @@ from cite_check.backends import (
     SemanticScholarBackend,
     SerpApiBackend,
 )
+from cite_check.backends.web import url_status
 from cite_check.cache import QueryCache
 from cite_check.config import Settings, load_settings
 from cite_check.engine import VerificationEngine
 from cite_check.ingest import parse_bibtex, parse_pdf
 from cite_check.ingest.grobid import GrobidClient
-from cite_check.models import Reference, VerificationStatus
+from cite_check.models import PASSING_STATUSES, Reference
 from cite_check.normalize import dedupe_references
 from cite_check.ratelimit import RateLimiter
 from cite_check.report import build_fixed_bib, print_report, to_json, to_markdown
@@ -61,12 +63,39 @@ def _ingest(path: Path, parser: str, settings: Settings) -> list[Reference]:
     raise typer.BadParameter(f"Unsupported input type: {suffix} (expected .bib or .pdf)")
 
 
-def _build_backend(settings: Settings, cache: QueryCache) -> ScholarBackend:
+# a query Google Scholar always answers; zero hits means we are being blocked
+CANARY_QUERY = '"Attention Is All You Need"'
+
+
+def _scholar_is_answering(backend: ScholarBackend) -> bool:
+    """The scholarly scraper reports a block page as *zero results*, not an error.
+
+    Without this check every reference would silently become NOT_FOUND.
+    """
+    try:
+        return bool(backend.search(CANARY_QUERY, 1))
+    except Exception:
+        return False
+
+
+def _build_backend(settings: Settings, cache: QueryCache) -> ScholarBackend | None:
     limiter = RateLimiter(settings.min_interval_s)
     if settings.backend == "serpapi":
         inner: ScholarBackend = SerpApiBackend(settings.serpapi_key or "", limiter)
     elif settings.backend == "scholarly":
         inner = ScholarlyBackend(limiter)
+        if not _scholar_is_answering(inner):  # uncached on purpose: tests *current* access
+            if settings.scholar_only:
+                raise typer.BadParameter(
+                    "Google Scholar returned no results for a canary query — it is "
+                    "blocking scripted access. Use --backend serpapi."
+                )
+            console.print(
+                "[yellow]Google Scholar is blocking scripted access (canary query returned "
+                "nothing). Falling back to arXiv + Crossref; use --backend serpapi for "
+                "Scholar coverage.[/yellow]"
+            )
+            return None
     else:
         raise typer.BadParameter(f"Unknown backend: {settings.backend}")
     return CachedBackend(inner, cache)
@@ -139,11 +168,20 @@ def verify(
         return
 
     cache = QueryCache(settings.cache_path)
+    helpers = not settings.scholar_only
+    crossref = CrossrefBackend(RateLimiter(1.0)) if helpers else None
+    arxiv = ArxivBackend(RateLimiter(3.0)) if helpers else None  # arXiv asks for 3 s
+    fallbacks: list[ScholarBackend] = []
+    if arxiv is not None and crossref is not None:
+        fallbacks = [CachedBackend(arxiv, cache), CachedBackend(crossref, cache)]
     engine = VerificationEngine(
         backend=_build_backend(settings, cache),
-        crossref=None if settings.scholar_only else CrossrefBackend(RateLimiter(1.0)),
-        corroborator=None if settings.scholar_only else SemanticScholarBackend(RateLimiter(1.0)),
+        crossref=crossref,
+        corroborator=SemanticScholarBackend(RateLimiter(1.0)) if helpers else None,
         results_per_query=settings.results_per_query,
+        arxiv=arxiv,
+        fallbacks=fallbacks,
+        url_checker=url_status if helpers else None,
     )
     try:
         results = list(
@@ -172,7 +210,7 @@ def verify(
             fixed_path.write_text(build_fixed_bib(results))
             console.print(f"Corrected bibliography written to [cyan]{fixed_path}[/cyan]")
 
-    if any(r.status != VerificationStatus.VERIFIED for r in results):
+    if any(r.status not in PASSING_STATUSES for r in results):
         raise typer.Exit(code=1)
 
 

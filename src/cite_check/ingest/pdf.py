@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 
 from cite_check.models import Reference
-from cite_check.normalize import clean_plain
+from cite_check.normalize import clean_plain, extract_arxiv_id
 
 _HEADING_RE = re.compile(
     r"^\s*(?:[0-9]{1,2}\.?\s+|[IVXLC]+\.?\s+)?"
@@ -205,6 +205,7 @@ def parse_reference_string(raw: str, index: int) -> Reference | None:
         year=_reference_year(raw),
         venue=venue,
         doi=doi_match.group(1).rstrip(".") if doi_match else None,
+        arxiv_id=extract_arxiv_id(raw),
         source="pdf",
     )
 

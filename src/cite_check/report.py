@@ -13,6 +13,7 @@ _STATUS_STYLE = {
     VerificationStatus.VERIFIED: "green",
     VerificationStatus.MISMATCH: "yellow",
     VerificationStatus.NOT_FOUND: "red",
+    VerificationStatus.WEB_ONLY: "cyan",
     VerificationStatus.ERROR: "magenta",
 }
 

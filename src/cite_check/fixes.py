@@ -2,6 +2,11 @@
 
 import re
 
+import bibtexparser
+from bibtexparser.bibdatabase import BibDatabase
+from bibtexparser.bparser import BibTexParser
+from bibtexparser.bwriter import BibTexWriter
+
 from cite_check.models import Reference, ScholarRecord, SuggestedFix
 
 _ENTRY_TYPE_RE = re.compile(r"@(\w+)\s*\{")
@@ -25,10 +30,43 @@ def _bibtex_authors(authors: list[str]) -> str:
     return " and ".join(authors)
 
 
+def _patch_original(
+    ref: Reference, record: ScholarRecord, field_diffs: dict[str, tuple[str, str]]
+) -> str | None:
+    """Edit only the disputed fields of the original entry, keeping everything else
+    (volume, pages, url, ...). None if the raw block can't be re-parsed."""
+    parser = BibTexParser(common_strings=True)
+    parser.ignore_nonstandard_types = False
+    try:
+        entries = bibtexparser.loads(ref.raw, parser).entries
+    except Exception:
+        return None
+    if len(entries) != 1:
+        return None
+    entry = entries[0]
+    if "title" in field_diffs:
+        entry["title"] = f"{{{record.title}}}"
+    if "authors" in field_diffs and record.authors:
+        entry["author"] = _bibtex_authors(record.authors)
+    if "year" in field_diffs and record.year is not None:
+        entry["year"] = str(record.year)
+    if "doi" in field_diffs:
+        entry.pop("doi", None)  # wrong DOI: dropping it beats keeping a false pointer
+    database = BibDatabase()
+    database.entries = [entry]
+    writer = BibTexWriter()
+    writer.order_entries_by = None
+    writer.display_order = ["author", "title", "booktitle", "journal", "year"]
+    return str(writer.write(database)).strip()
+
+
 def build_corrected_bibtex(
     ref: Reference, record: ScholarRecord, field_diffs: dict[str, tuple[str, str]]
 ) -> str:
-    """Regenerate the entry, taking disputed fields from the Scholar record."""
+    """The entry with disputed fields taken from the found record."""
+    patched = _patch_original(ref, record, field_diffs)
+    if patched is not None:
+        return patched
     entry_type = _entry_type(ref)
     title = record.title if "title" in field_diffs else ref.title
     authors = record.authors if "authors" in field_diffs else ref.authors
@@ -44,7 +82,7 @@ def build_corrected_bibtex(
         lines.append(f"  {field} = {{{venue}}},")
     if year is not None:
         lines.append(f"  year = {{{year}}},")
-    if ref.doi:
+    if ref.doi and "doi" not in field_diffs:
         lines.append(f"  doi = {{{ref.doi}}},")
     lines.append("}")
     return "\n".join(lines)

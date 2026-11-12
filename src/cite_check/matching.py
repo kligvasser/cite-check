@@ -46,6 +46,24 @@ def _author_parts(name: str) -> tuple[str, str]:
     return last, initial
 
 
+def _author_variants(name: str) -> list[tuple[str, str]]:
+    """(last, initial) readings of a name: as written, and with given/family swapped.
+
+    Indexes sometimes store names family-first without a comma ("Murtadha Ahmed" for
+    Ahmed Murtadha), so a found name may match a cited one only when read swapped.
+    """
+    tokens = normalize_author(name).split()
+    variants = [_author_parts(name)]
+    if len(tokens) > 1:
+        variants.append((tokens[0].lower(), tokens[-1][0].lower()))
+    return variants
+
+
+def _same_author(cited: tuple[str, str], found: tuple[str, str]) -> bool:
+    (last, initial), (f_last, f_initial) = cited, found
+    return fuzz.ratio(last, f_last) >= 85 and (not initial or not f_initial or initial == f_initial)
+
+
 def author_score(cited: list[str], found: list[str]) -> float | None:
     """Fraction of cited authors present in the found list (last name + initial).
 
@@ -54,23 +72,24 @@ def author_score(cited: list[str], found: list[str]) -> float | None:
     """
     if not cited or not found:
         return None
-    found_parts = [_author_parts(name) for name in found]
+    found_variants = [_author_variants(name) for name in found]
     matched = 0
     for name in cited:
-        last, initial = _author_parts(name)
-        for f_last, f_initial in found_parts:
-            if fuzz.ratio(last, f_last) >= 85 and (
-                not initial or not f_initial or initial == f_initial
-            ):
-                matched += 1
-                break
+        parts = _author_parts(name)
+        if any(_same_author(parts, v) for variants in found_variants for v in variants):
+            matched += 1
     return min(100.0, 100.0 * matched / min(len(cited), len(found)))
 
 
-def year_score(cited: int | None, found: int | None) -> float | None:
+PREPRINT_LAG_YEARS = 3  # a preprint may be formally published this many years later
+
+
+def year_score(cited: int | None, found: int | None, preprint: bool = False) -> float | None:
     if cited is None or found is None:
         return None
     if cited == found:
+        return 100.0
+    if preprint and 0 < cited - found <= PREPRINT_LAG_YEARS:  # arXiv 2022 -> ICLR 2023
         return 100.0
     if abs(cited - found) == 1:  # Scholar years are noisy: preprint vs published
         return 70.0
@@ -87,7 +106,7 @@ def score_candidate(ref: Reference, record: ScholarRecord) -> MatchScore:
     scores: dict[str, float | None] = {
         "title": title_score(ref.title, record.title),
         "authors": author_score(ref.authors, record.authors),
-        "year": year_score(ref.year, record.year),
+        "year": year_score(ref.year, record.year, record.preprint),
         "venue": venue_score(ref.venue, record.venue),
     }
     available = {k: v for k, v in scores.items() if v is not None}

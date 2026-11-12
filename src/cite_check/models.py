@@ -16,6 +16,9 @@ class Reference(BaseModel):
     year: int | None = None
     venue: str | None = None  # journal / conference / publisher
     doi: str | None = None
+    arxiv_id: str | None = None  # e.g. "2207.12598" (no version suffix)
+    url: str | None = None  # web resources (blogs, model cards) cited via url/howpublished
+    entry_type: str | None = None  # BibTeX entry type, lowercased ("misc", "article", ...)
     source: Literal["bibtex", "pdf"]
 
 
@@ -29,13 +32,20 @@ class ScholarRecord(BaseModel):
     url: str | None = None
     cited_by: int | None = None
     backend: str
+    # preprint records carry the *first posting* year: a later cited year is expected
+    preprint: bool = False
 
 
 class VerificationStatus(StrEnum):
     VERIFIED = "VERIFIED"
     MISMATCH = "MISMATCH"
     NOT_FOUND = "NOT_FOUND"
+    WEB_ONLY = "WEB_ONLY"  # not a scholarly record (blog, model card) but its URL is live
     ERROR = "ERROR"
+
+
+# statuses that do not fail the run (exit code 0)
+PASSING_STATUSES = frozenset({VerificationStatus.VERIFIED, VerificationStatus.WEB_ONLY})
 
 
 class SuggestedFix(BaseModel):
